@@ -1,0 +1,33 @@
+Package: bltools
+Title: Anne's Tools Used in the Burant Lab
+Version: 0.0.0.9000
+Authors@R: c(
+    person(
+      "Anne", "Weitzel",
+      email = "weitzela@umich.edu",
+      role = c("aut", "cre"),
+      comment = c(ORCID = "0000-0002-7615-6357")
+    )
+  )
+Description: These are functions I put together that were helpful across multiple analysis files during my time in the Burant Lab, so I decided to put them in a package for easier reference moving forward.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Imports:
+    tictoc,
+    Seqinfo,
+    GenomeInfoDb,
+    biomaRt,
+    knitr,
+    limma,
+    matrixStats,
+    GenomicRanges,
+    GenomicFeatures,
+    plyranges,
+    gtools,
+    dplyr,
+    tidyr,
+    purrr,
+    rlang,
+    stringr
