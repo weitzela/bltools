@@ -30,4 +30,6 @@ Imports:
     tidyr,
     purrr,
     rlang,
-    stringr
+    stringr,
+    ComplexHeatmap,
+    grid
