@@ -2,19 +2,48 @@
 % Please edit documentation in R/fxns.R
 \name{hmSigDots}
 \alias{hmSigDots}
-\title{Add dots to heatmap}
+\title{Add dots or values to heatmap cells}
 \usage{
-hmSigDots(value_mat, threshold = 0.05, dot_pt_size = 2, fun = "layer")
+hmSigDots(
+  value_mat,
+  threshold = 0.05,
+  dot_pt_size = 2,
+  fun = "layer",
+  label_mat = NULL,
+  label_fmt = NULL,
+  gp = grid::gpar(fontsize = 6),
+  ...
+)
 }
 \arguments{
-\item{value_mat}{provide a significance matrix the same dimensions and order as the matrix used to plot values}
+\item{value_mat}{provide a significance matrix the same dimensions and order as the matrix used to plot values. This matrix decides which cells get annotated.}
 
-\item{threshold}{a significance score to determine what cells to print a dot}
+\item{threshold}{a significance score to determine what cells to annotate. Set to \code{NULL} to annotate every non-\code{NA} cell (e.g. to print a value in every cell).}
 
-\item{dot_pt_size}{size of dot to print on heatmap}
+\item{dot_pt_size}{size of dot to print on heatmap, in points. Only used when \code{label_mat} is \code{NULL}.}
 
-\item{fun}{value of either layer or cell}
+\item{fun}{value of either layer or cell. "layer" is vectorised over the cells of a slice and is faster; "cell" is called once per cell.}
+
+\item{label_mat}{matrix of values to print in the annotated cells, same dimensions and order as \code{value_mat}. \code{NULL} (default) draws dots instead. Pass \code{value_mat} itself to print the significance values, or the plotted matrix to print e.g. correlation coefficients only where p < threshold. May be numeric or character (e.g. pre-computed significance stars).}
+
+\item{label_fmt}{how to turn \code{label_mat} values into text: either a \code{sprintf()} format string (e.g. \code{"\%.2f"}) or a function taking a vector of values and returning a character vector. Left \code{NULL}, a numeric \code{label_mat} whose values are all within 1 in magnitude (p-values, correlation coefficients) is formatted as \code{"\%.2f"}; anything else uses \code{format()} defaults.}
+
+\item{gp}{a \code{grid::gpar()} of graphical parameters, merged over the default \code{gpar(fontsize = 6)}. Font parameters are dropped when drawing dots so \code{dot_pt_size} stays in control of the dot size.}
+
+\item{...}{individual \code{gpar()} parameters (e.g. \code{fontsize = 8}, \code{col = "white"}, \code{fontface = "bold"}), merged over \code{gp}.}
 }
 \description{
-Annotate significant ComplexHeatmap Heatmap cells with dot if significant. This can be used as a layer function in the \code{Heatmap} function.
+Annotate significant ComplexHeatmap Heatmap cells with a dot, or print values in them.
+Supplying \code{label_mat} switches from drawing dots to printing that matrix's values.
+The returned function is passed to either the \code{layer_fun} or the \code{cell_fun} argument of \code{ComplexHeatmap::Heatmap()}.
+}
+\examples{
+# dots where p < 0.01 (original behaviour)
+# Heatmap(r_mat, layer_fun = hmSigDots(p_mat, 0.01))
+# print the correlation coefficient in every significant cell
+# Heatmap(r_mat, layer_fun = hmSigDots(p_mat, 0.05, label_mat = r_mat,
+#                                      label_fmt = "\%.2f", fontsize = 7))
+# print significance stars in every cell
+# Heatmap(r_mat, cell_fun = hmSigDots(p_mat, threshold = NULL, fun = "cell",
+#                                     label_mat = p_mat, label_fmt = gtools::stars.pval))
 }
