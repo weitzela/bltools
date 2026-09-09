@@ -29,32 +29,86 @@ pdfEmbed = function(file, plot_fxn, width, height, family = "ArialMT", device = 
   embedFonts(file, outfile = file)
 }
 
-#' Add dots to heatmap
-#' 
-#' Annotate significant ComplexHeatmap Heatmap cells with dot if significant. This can be used as a layer function in the `Heatmap` function.
-#' 
+#' Add dots or values to heatmap cells
+#'
+#' Annotate significant ComplexHeatmap Heatmap cells with a dot, or print values in them.
+#' Supplying `label_mat` switches from drawing dots to printing that matrix's values.
+#' The returned function is passed to either the `layer_fun` or the `cell_fun` argument of `ComplexHeatmap::Heatmap()`.
+#'
 #' @export
-#' @param value_mat provide a significance matrix the same dimensions and order as the matrix used to plot values
-#' @param threshold a significance score to determine what cells to print a dot
-#' @param dot_pt_size size of dot to print on heatmap
-#' @param fun value of either layer or cell
-hmSigDots = function(value_mat, threshold = 0.05, dot_pt_size = 2, fun = "layer") {
-  # use this function within a complex Heatmap function: e.g., Heatmap(..., layer_fun = hm_sig_dots(pvalue_mat, 0.01))
-  print_value = function(x, y, dot_pt_size) {
-    grid::grid.points(x, y, size = grid::unit(dot_pt_size, "pt"), pch = 16)
+#' @param value_mat provide a significance matrix the same dimensions and order as the matrix used to plot values. This matrix decides which cells get annotated.
+#' @param threshold a significance score to determine what cells to annotate. Set to `NULL` to annotate every non-`NA` cell (e.g. to print a value in every cell).
+#' @param dot_pt_size size of dot to print on heatmap, in points. Only used when `label_mat` is `NULL`.
+#' @param fun value of either layer or cell. "layer" is vectorised over the cells of a slice and is faster; "cell" is called once per cell.
+#' @param label_mat matrix of values to print in the annotated cells, same dimensions and order as `value_mat`. `NULL` (default) draws dots instead. Pass `value_mat` itself to print the significance values, or the plotted matrix to print e.g. correlation coefficients only where p < threshold. May be numeric or character (e.g. pre-computed significance stars).
+#' @param label_fmt how to turn `label_mat` values into text: either a `sprintf()` format string (e.g. `"%.2f"`) or a function taking a vector of values and returning a character vector. Left `NULL`, a numeric `label_mat` whose values are all within 1 in magnitude (p-values, correlation coefficients) is formatted as `"%.2f"`; anything else uses `format()` defaults.
+#' @param gp a `grid::gpar()` of graphical parameters, merged over the default `gpar(fontsize = 6)`. Font parameters are dropped when drawing dots so `dot_pt_size` stays in control of the dot size.
+#' @param ... individual `gpar()` parameters (e.g. `fontsize = 8`, `col = "white"`, `fontface = "bold"`), merged over `gp`.
+#' @examples
+#' # dots where p < 0.01 (original behaviour)
+#' # Heatmap(r_mat, layer_fun = hmSigDots(p_mat, 0.01))
+#' # print the correlation coefficient in every significant cell
+#' # Heatmap(r_mat, layer_fun = hmSigDots(p_mat, 0.05, label_mat = r_mat,
+#' #                                      label_fmt = "%.2f", fontsize = 7))
+#' # print significance stars in every cell
+#' # Heatmap(r_mat, cell_fun = hmSigDots(p_mat, threshold = NULL, fun = "cell",
+#' #                                     label_mat = p_mat, label_fmt = gtools::stars.pval))
+hmSigDots = function(value_mat, threshold = 0.05, dot_pt_size = 2, fun = "layer",
+                     label_mat = NULL, label_fmt = NULL, gp = grid::gpar(fontsize = 6), ...) {
+  # use this function within a complex Heatmap function: e.g., Heatmap(..., layer_fun = hmSigDots(pvalue_mat, 0.01))
+  fun = match.arg(fun, c("layer", "cell"))
+  value_mat = as.matrix(value_mat)
+  if (!is.null(label_mat)) {
+    label_mat = as.matrix(label_mat)
+    if (!identical(dim(label_mat), dim(value_mat))) stop("`label_mat` must have the same dimensions as `value_mat`.")
+    # fractional values (p-values, correlations) print unreadably wide with format() defaults
+    if (is.null(label_fmt) && is.numeric(label_mat) && any(!is.na(label_mat)) &&
+        max(abs(label_mat), na.rm = TRUE) <= 1) label_fmt = "%.2f"
   }
-  
+
+  # merge gpar defaults < gp < ..., so only the parameters to change need to be given
+  .gp = list(fontsize = 6)
+  .gp[names(gp)] = gp
+  .dots = list(...)
+  .gp[names(.dots)] = .dots
+  # font parameters rescale character-based points, so keep them out of the dot gpar
+  if (is.null(label_mat)) .gp = .gp[setdiff(names(.gp), c("fontsize", "fontface", "fontfamily", "cex", "lineheight"))]
+  .gp = do.call(grid::gpar, .gp)
+
+  print_value = function(x, y, cell_value) {
+    if (is.null(cell_value)) {
+      grid::grid.points(x, y, size = grid::unit(dot_pt_size, "pt"), pch = 16, gp = .gp)
+    } else {
+      if (is.function(label_fmt)) cell_value = as.character(label_fmt(cell_value))
+      else if (!is.null(label_fmt)) cell_value = sprintf(label_fmt, cell_value)
+      else cell_value = format(cell_value, trim = TRUE)
+      grid::grid.text(cell_value, x, y, gp = .gp)
+    }
+  }
+
   if (fun == "layer") {
     .layer_fun = function(j, i, x, y, width, height, fill) {
       v_P = ComplexHeatmap::pindex(value_mat, i, j)
-      c_1 = (!is.na(v_P)) & (v_P < threshold)
-      print_value(x[c_1], y[c_1], dot_pt_size)
+      c_1 = !is.na(v_P)
+      if (!is.null(threshold)) c_1 = c_1 & (v_P < threshold)
+      if (is.null(label_mat)) {
+        # subsetting a unit vector with nothing selected is an error, so check first
+        if (any(c_1)) print_value(x[c_1], y[c_1], NULL)
+      } else {
+        v_L = ComplexHeatmap::pindex(label_mat, i, j)
+        c_1 = c_1 & !is.na(v_L)
+        if (any(c_1)) print_value(x[c_1], y[c_1], v_L[c_1])
+      }
     }
     return(.layer_fun)
   } else {
     .cell_fun = function(j, i, x, y, width, height, fill) {
-      if(!is.na(value_mat[i, j]) & (value_mat[i, j] < 0.05)) {
-        print_value(x, y, dot_pt_size)
+      v_P = value_mat[i, j]
+      if (is.na(v_P) || (!is.null(threshold) && !(v_P < threshold))) return(invisible(NULL))
+      if (is.null(label_mat)) {
+        print_value(x, y, NULL)
+      } else if (!is.na(label_mat[i, j])) {
+        print_value(x, y, label_mat[i, j])
       }
     }
     return(.cell_fun)
